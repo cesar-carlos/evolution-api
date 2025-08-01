@@ -19,6 +19,7 @@ import { GroupRouter } from './group.router';
 import { InstanceRouter } from './instance.router';
 import { LabelRouter } from './label.router';
 import { ProxyRouter } from './proxy.router';
+import { QrcodeRouter } from './qrcode.router';
 import { MessageRouter } from './sendMessage.router';
 import { SettingsRouter } from './settings.router';
 import { TemplateRouter } from './template.router';
@@ -62,24 +63,29 @@ router
   .use((req, res, next) => telemetry.collectTelemetry(req, res, next))
 
   .get('/', async (req, res) => {
-    res.status(HttpStatus.OK).json({
-      status: HttpStatus.OK,
-      message: 'Welcome to the Evolution API, it is working!',
-      version: packageJson.version,
-      clientName: process.env.DATABASE_CONNECTION_CLIENT_NAME,
-      manager: !serverConfig.DISABLE_MANAGER ? `${req.protocol}://${req.get('host')}/manager` : undefined,
-      documentation: `https://doc.evolution-api.com`,
-      whatsappWebVersion: (await fetchLatestWaWebVersion({})).version.join('.'),
-    });
+    res
+      .status(HttpStatus.OK)
+      .json({
+        status: HttpStatus.OK,
+        message: 'Welcome to the Evolution API, it is working!',
+        version: packageJson.version,
+        clientName: process.env.DATABASE_CONNECTION_CLIENT_NAME,
+        manager: !serverConfig.DISABLE_MANAGER ? `${req.protocol}://${req.get('host')}/manager` : undefined,
+        documentation: `https://doc.evolution-api.com`,
+        whatsappWebVersion:
+          process.env.CONFIG_SESSION_PHONE_VERSION || (await fetchLatestWaWebVersion({})).version.join('.'),
+      });
   })
   .post('/verify-creds', authGuard['apikey'], async (req, res) => {
-    return res.status(HttpStatus.OK).json({
-      status: HttpStatus.OK,
-      message: 'Credentials are valid',
-      facebookAppId: process.env.FACEBOOK_APP_ID,
-      facebookConfigId: process.env.FACEBOOK_CONFIG_ID,
-      facebookUserToken: process.env.FACEBOOK_USER_TOKEN,
-    });
+    return res
+      .status(HttpStatus.OK)
+      .json({
+        status: HttpStatus.OK,
+        message: 'Credentials are valid',
+        facebookAppId: process.env.FACEBOOK_APP_ID,
+        facebookConfigId: process.env.FACEBOOK_CONFIG_ID,
+        facebookUserToken: process.env.FACEBOOK_USER_TOKEN,
+      });
   })
   .use('/instance', new InstanceRouter(configService, ...guards).router)
   .use('/message', new MessageRouter(...guards).router)
@@ -91,6 +97,7 @@ router
   .use('/settings', new SettingsRouter(...guards).router)
   .use('/proxy', new ProxyRouter(...guards).router)
   .use('/label', new LabelRouter(...guards).router)
+  .use('/qrcode', new QrcodeRouter(configService).router)
   .use('', new ChannelRouter(configService, ...guards).router)
   .use('', new EventRouter(configService, ...guards).router)
   .use('', new ChatbotRouter(...guards).router)
