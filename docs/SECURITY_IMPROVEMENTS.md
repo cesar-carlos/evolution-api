@@ -29,7 +29,7 @@ res.json({
 
 ### 2. **RATE LIMITING**
 **Problema:** Sem proteção contra ataques de força bruta.
-**Solução:** Implementado rate limiting de 10 requests/minuto por IP.
+**Solução:** Implementado rate limiting de 10 requests/minuto por IP em rotas sensíveis como `/exchange-token`.
 
 ```typescript
 const RATE_LIMIT_MAX_REQUESTS = 10; // 10 requests por minuto
@@ -82,16 +82,20 @@ this.logger.log(`API Key status: ${isConfigured ? 'Configured' : 'Not configured
 
 ```mermaid
 sequenceDiagram
-    participant C as Cliente
-    participant S as Servidor
-    
+    participant C as Cliente (Navegador)
+    participant S as Servidor (API)
+
     C->>S: GET /qrcode/api-key
-    S->>S: Gera token temporário
-    S->>C: {sessionToken, configured, expiresIn}
-    C->>S: POST /qrcode/exchange-token
-    S->>S: Valida token
-    S->>C: {apiKey}
-    C->>S: Usa apiKey nas requisições
+    S->>S: Gera sessionToken (expira em 1h)
+    S-->>C: Retorna { configured: true, sessionToken }
+
+    C->>S: POST /qrcode/exchange-token (com sessionToken)
+    S->>S: Valida sessionToken
+    S-->>C: Retorna { apiKey }
+
+    C->>S: GET /qrcode/connect/{instance} (com apiKey no header)
+    S->>S: Inicia conexão WebSocket
+    S-->>C: Retorna { status }
 ```
 
 ### Rate Limiting em Memória
@@ -172,7 +176,7 @@ AUTHENTICATION_API_KEY=$(openssl rand -hex 32)
 ```bash
 # Teste de rate limiting
 for i in {1..15}; do
-  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/qrcode/api-key
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Content-Type: application/json" -d '{"sessionToken":"test"}' http://localhost:8080/qrcode/exchange-token
 done
 # Deve retornar 429 após 10 requests
 ```

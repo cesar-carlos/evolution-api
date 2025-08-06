@@ -27,13 +27,11 @@ function rateLimit(req: any, res: any, next: any) {
   }
 
   if (clientData.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return res
-      .status(429)
-      .json({
-        error: 'Too many requests',
-        message: 'Rate limit exceeded. Try again later.',
-        retryAfter: Math.ceil((clientData.resetTime - now) / 1000),
-      });
+    return res.status(429).json({
+      error: 'Too many requests',
+      message: 'Rate limit exceeded. Try again later.',
+      retryAfter: Math.ceil((clientData.resetTime - now) / 1000),
+    });
   }
 
   clientData.count++;
@@ -50,7 +48,7 @@ export class QrcodeRouter extends RouterBroker {
     super();
 
     // Endpoint seguro para verificar se a API está configurada (sem expor a chave)
-    this.router.get('/api-key', rateLimit, async (req, res) => {
+    this.router.get('/api-key', async (req, res) => {
       try {
         const auth = this.configService.get('AUTHENTICATION');
         let isConfigured = false;
