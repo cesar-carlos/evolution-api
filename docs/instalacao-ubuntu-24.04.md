@@ -1,27 +1,35 @@
-## Guia de instalação — Ubuntu 24.04 (Noble)
+### Instalação da Evolution API no Ubuntu 24.04 com NVM (Node 20)
 
-Este passo a passo instala e configura o Evolution API como serviço no Ubuntu 24.04, utilizando Node.js 20 via nvm, com build de produção e serviço systemd.
+Este guia orienta a instalar e configurar a Evolution API no Ubuntu 24.04 usando NVM (Node 20), com passos opcionais para PostgreSQL, Redis e PM2.
 
-### 1) Pré‑requisitos
-- Acesso sudo ao servidor Ubuntu 24.04
-- Porta de aplicação liberada (padrão 8080) ou um proxy reverso (ex.: NGINX)
-
-### 2) Atualize o sistema e instale dependências
+### 1) Atualize o sistema
 ```bash
 sudo apt update && sudo apt -y upgrade
-sudo apt -y install build-essential git curl ffmpeg redis-server
-
-# (Opcional) PostgreSQL 16, caso vá persistir dados com banco
-# sudo apt -y install postgresql postgresql-contrib
 ```
 
-Ative o Redis (opcional, caso use cache/instâncias em Redis):
+### 2) (Opcional) Instalar PostgreSQL 16
 ```bash
-sudo systemctl enable --now redis-server
-sudo systemctl status redis-server --no-pager
+sudo apt -y install postgresql postgresql-contrib
+sudo systemctl enable --now postgresql
+sudo -u postgres psql <<'SQL'
+CREATE USER evolutionv2 WITH PASSWORD 'TroqueEstaSenha';
+ALTER USER evolutionv2 CREATEDB;
+CREATE DATABASE evolution OWNER evolutionv2;
+SQL
+```
+Anote a connection string (exemplo):
+```
+postgresql://evolutionv2:TroqueEstaSenha@localhost:5432/evolution?schema=public
 ```
 
-### 3) Instale o nvm e Node.js 20
+### 3) (Opcional) Instalar Redis
+```bash
+sudo apt -y install redis-server
+sudo systemctl enable --now redis-server
+redis-cli ping  # deve retornar PONG
+```
+
+### 4) Instalar NVM e Node 20
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
@@ -29,147 +37,72 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \ . "$NVM_DIR/bash_completion"
 
 nvm install 20
+nvm use 20
 nvm alias default 20
 node -v
 ```
 
-### 4) Obtenha o código-fonte
+### 5) Clonar o repositório
 ```bash
 cd ~
-git clone https://github.com/EvolutionAPI/evolution-api.git
+git clone https://github.com/cesar-carlos/evolution-api.git
 cd evolution-api
 ```
 
-### 5) Configure variáveis de ambiente
-Crie um arquivo `.env` na raiz do projeto (ajuste conforme sua necessidade). Exemplo mínimo:
+### 6) Instalar dependências e configurar ambiente
 ```bash
-cat > .env << 'EOF'
-# Servidor
+nvm use
+npm ci
+
+# Copiar exemplo de env (ajuste conforme sua necessidade)
+cp .env.example .env 2>/dev/null || true
+```
+
+Abra o `.env` e ajuste, por exemplo:
+```
 SERVER_TYPE=http
 SERVER_PORT=8080
 SERVER_URL=http://localhost:8080
-
-# Autenticação (chave global de API)
 AUTHENTICATION_API_KEY=troque-esta-chave
 
-# Cache Redis (opcional)
+# Se for usar PostgreSQL
+# DATABASE_CONNECTION_URI="postgresql://evolutionv2:TroqueEstaSenha@localhost:5432/evolution?schema=public"
+# DATABASE_PROVIDER=postgresql
+
+# Cache
 CACHE_REDIS_ENABLED=false
 CACHE_LOCAL_ENABLED=true
-
-# Banco de dados (opcional)
-# DATABASE_CONNECTION_URI="postgresql://usuario:senha@localhost:5432/evolution?schema=public"
-# DATABASE_PROVIDER=postgresql
-# DATABASE_SAVE_DATA_INSTANCE=false
-
-# WebSocket (opcional)
-WEBSOCKET_ENABLED=false
-WEBSOCKET_GLOBAL_EVENTS=false
-EOF
 ```
 
-Se for usar PostgreSQL, crie o banco/usuário e defina `DATABASE_CONNECTION_URI` adequadamente.
-
-### 6) Instale dependências e gere build de produção
+### 7) Banco de dados (se usar Prisma/PostgreSQL)
 ```bash
-nvm use 20
-npm ci
+npm run db:generate
+npm run db:deploy
+```
+
+### 8) Build e start de produção
+```bash
 npm run build
-```
-
-### 7) Teste localmente
-```bash
 npm run start:prod
 # Logs devem indicar: HTTP - ON: 8080
-# Em outro terminal: curl -i http://localhost:8080
 ```
 
-### 8) (Opcional) Proxy reverso com NGINX
+### 9) (Opcional) Gerenciar com PM2
 ```bash
-sudo apt -y install nginx
-sudo tee /etc/nginx/sites-available/evolution-api >/dev/null <<'NGINX'
-server {
-    listen 80;
-    server_name SEU_DOMINIO_AQUI;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-NGINX
-sudo ln -s /etc/nginx/sites-available/evolution-api /etc/nginx/sites-enabled/evolution-api
-sudo nginx -t && sudo systemctl reload nginx
+sudo npm -g install pm2
+pm2 start "npm run start:prod" --name evolution-api
+pm2 save
+pm2 startup
 ```
 
-### 9) Rodar como serviço (systemd)
-Crie um serviço systemd que carrega o nvm e inicia o `start:prod`:
+### 10) Testar
 ```bash
-sudo tee /etc/systemd/system/evolution-api.service >/dev/null <<'UNIT'
-[Unit]
-Description=Evolution API (Node 20 via nvm)
-After=network.target
-
-[Service]
-Type=simple
-User=%i
-WorkingDirectory=/home/%i/evolution-api
-Environment=PORT=8080
-Environment=NODE_ENV=PROD
-EnvironmentFile=-/etc/default/evolution-api
-ExecStart=/bin/bash -lc 'source ~/.nvm/nvm.sh && cd /home/%i/evolution-api && nvm use 20 && npm run start:prod'
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-# Arquivo de variáveis (opcional)
-sudo tee /etc/default/evolution-api >/dev/null <<'ENV'
-# Exemplo: sobrepor/definir variáveis adicionais
-# SERVER_PORT=8080
-# AUTHENTICATION_API_KEY=troque-esta-chave
-ENV
-
-# Habilite e inicie o serviço para o usuário atual
-sudo systemctl daemon-reload
-sudo systemctl enable evolution-api@$USER
-sudo systemctl start evolution-api@$USER
-sudo systemctl status evolution-api@$USER --no-pager
+curl -i http://localhost:8080/
 ```
 
-Logs do serviço:
-```bash
-journalctl -u evolution-api@$USER -f --no-pager
-```
-
-### 10) Firewall (UFW)
-Se estiver expondo direto na porta 8080:
-```bash
-sudo ufw allow 8080/tcp
-```
-Se usa NGINX com HTTP (80) / HTTPS (443):
-```bash
-sudo ufw allow 'Nginx Full'
-```
-
-### 11) Atualização do servidor
-```bash
-cd ~/evolution-api
-git pull
-nvm use 20
-npm ci
-npm run build
-sudo systemctl restart evolution-api@$USER
-```
-
-### 12) Dicas e solução de problemas
-- Porta padrão: 8080. Para alterar, defina `SERVER_PORT` no `.env` ou no systemd.
-- Caso falte dependências do Node: verifique `nvm use 20` e reinstale com `npm ci`.
-- Redis/PostgreSQL são opcionais; habilite e configure conforme sua necessidade.
-- Para expor via domínio/HTTPS, use NGINX + Certbot (LetsEncrypt).
+### Dicas
+- Para alterar a porta: `SERVER_PORT=3000 npm run start:prod` ou ajuste no `.env`.
+- Dentro do projeto com `.nvmrc`, `nvm use` seleciona automaticamente o Node recomendado.
+- Se usar Redis/Postgres, garanta que serviços estão ativos e credenciais corretas no `.env`.
 
 
