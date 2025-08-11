@@ -7,19 +7,29 @@ Este guia orienta a instalar e configurar a Evolution API no Ubuntu 24.04 usando
 sudo apt update && sudo apt -y upgrade
 ```
 
-### 2) (Opcional) Instalar PostgreSQL 16
+### 2) (Opcional) Instalar PostgreSQL 17
 ```bash
-sudo apt -y install postgresql postgresql-contrib
+# Adicionar repositório oficial PGDG e instalar PostgreSQL 17
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+source /etc/os-release
+echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt/ ${UBUNTU_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+
+sudo apt update
+sudo apt -y install postgresql-17 postgresql-client-17 postgresql-contrib
 sudo systemctl enable --now postgresql
+
 sudo -u postgres psql <<'SQL'
-CREATE USER evolutionv2 WITH PASSWORD 'TroqueEstaSenha';
-ALTER USER evolutionv2 CREATEDB;
-CREATE DATABASE evolution OWNER evolutionv2;
+
+CREATE USER evolution WITH PASSWORD 'TroqueEstaSenha';
+ALTER USER evolution WITH SUPERUSER;
+ALTER USER evolution CREATEDB;
+CREATE DATABASE evolution;
 SQL
 ```
 Anote a connection string (exemplo):
 ```
-postgresql://evolutionv2:TroqueEstaSenha@localhost:5432/evolution?schema=public
+postgresql://evolution:TroqueEstaSenha@localhost:5432/evolution?schema=public
 ```
 
 ### 3) (Opcional) Instalar Redis
@@ -66,7 +76,7 @@ SERVER_URL=http://localhost:8080
 AUTHENTICATION_API_KEY=troque-esta-chave
 
 # Se for usar PostgreSQL
-# DATABASE_CONNECTION_URI="postgresql://evolutionv2:TroqueEstaSenha@localhost:5432/evolution?schema=public"
+# DATABASE_CONNECTION_URI="postgresql://evolution:TroqueEstaSenha@localhost:5432/evolution?schema=public"
 # DATABASE_PROVIDER=postgresql
 
 # Cache
