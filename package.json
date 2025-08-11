@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc --noEmit && tsup",
     "start": "tsx ./src/main.ts",
-    "start:prod": "bash -c 'source ~/.nvm/nvm.sh && nvm use && node dist/main'",
+    "start:prod": "bash -c 'source ~/.nvm/nvm.sh && nvm use && node --experimental-specifier-resolution=node dist/main.mjs'",
     "dev:server": "bash -c 'source ~/.nvm/nvm.sh && nvm use && tsx watch ./src/main.ts'",
     "test": "tsx watch ./test/all.test.ts",
     "lint": "eslint --fix --ext .ts src",

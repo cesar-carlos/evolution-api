@@ -2,9 +2,14 @@ import { ConfigService, Language } from '@config/env.config';
 import fs from 'fs';
 import i18next from 'i18next';
 import path from 'path';
+import { ROOT_DIR } from '@config/path.config';
 
 const languages = ['en', 'pt-BR', 'es'];
-const translationsPath = path.join(__dirname, 'translations');
+
+// Resolve caminho de traduções tanto no build (dist) quanto no dev (src)
+const distTranslationsPath = path.join(ROOT_DIR, 'dist', 'translations');
+const srcTranslationsPath = path.join(ROOT_DIR, 'src', 'utils', 'translations');
+const translationsPath = fs.existsSync(distTranslationsPath) ? distTranslationsPath : srcTranslationsPath;
 const configService: ConfigService = new ConfigService();
 
 const resources: any = {};
@@ -12,8 +17,9 @@ const resources: any = {};
 languages.forEach((language) => {
   const languagePath = path.join(translationsPath, `${language}.json`);
   if (fs.existsSync(languagePath)) {
+    const fileContents = fs.readFileSync(languagePath, 'utf8');
     resources[language] = {
-      translation: require(languagePath),
+      translation: JSON.parse(fileContents),
     };
   }
 });
