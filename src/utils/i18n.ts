@@ -1,8 +1,8 @@
 import { ConfigService, Language } from '@config/env.config';
+import { ROOT_DIR } from '@config/path.config';
 import fs from 'fs';
 import i18next from 'i18next';
 import path from 'path';
-import { ROOT_DIR } from '@config/path.config';
 
 const languages = ['en', 'pt-BR', 'es'];
 
