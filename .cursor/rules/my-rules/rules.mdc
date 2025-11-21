@@ -84,12 +84,6 @@ alwaysApply: true
 - Use make force_run for local testing
 - Write tests that document behavior, not implementation
 
-## Enterprise Compatibility
-
-- Check enterprise/ directory for related files
-- Maintain compatibility with Enterprise features
-- Follow Enterprise development practices
-
 ## Pull Requests
 
 - Create PR from custom/\* to main
