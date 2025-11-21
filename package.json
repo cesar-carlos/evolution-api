@@ -2,24 +2,31 @@
   "name": "evolution-api",
   "version": "2.3.6",
   "description": "Rest api for communication with WhatsApp",
-  "main": "./dist/main.js",
-  "type": "commonjs",
+  "main": "./dist/main.cjs",
+  "module": "./dist/main.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/main.js",
+      "require": "./dist/main.cjs"
+    }
+  },
   "scripts": {
-    "build": "tsc --noEmit && tsup",
+    "build": "tsc && tsc-alias && node scripts/fix-extensions.mjs",
     "start": "tsx ./src/main.ts",
     "start:prod": "bash scripts/start-prod.sh",
     "dev:server": "tsx watch ./src/main.ts",
     "test": "tsx watch ./test/all.test.ts",
-    "lint": "eslint --fix --ext .ts src",
-    "lint:check": "eslint --ext .ts src",
+    "lint": "eslint --fix src",
+    "lint:check": "eslint src",
     "commit": "cz",
     "commitlint": "commitlint --edit",
-    "db:generate": "node runWithProvider.js \"npx prisma generate --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
-    "db:deploy": "node runWithProvider.js \"rm -rf ./prisma/migrations && cp -r ./prisma/DATABASE_PROVIDER-migrations ./prisma/migrations && npx prisma migrate deploy --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
-    "db:deploy:win": "node runWithProvider.js \"xcopy /E /I prisma\\DATABASE_PROVIDER-migrations prisma\\migrations && npx prisma migrate deploy --schema prisma\\DATABASE_PROVIDER-schema.prisma\"",
-    "db:studio": "node runWithProvider.js \"npx prisma studio --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
-    "db:migrate:dev": "node runWithProvider.js \"rm -rf ./prisma/migrations && cp -r ./prisma/DATABASE_PROVIDER-migrations ./prisma/migrations && npx prisma migrate dev --schema ./prisma/DATABASE_PROVIDER-schema.prisma && cp -r ./prisma/migrations/* ./prisma/DATABASE_PROVIDER-migrations\"",
-    "db:migrate:dev:win": "node runWithProvider.js \"xcopy /E /I prisma\\DATABASE_PROVIDER-migrations prisma\\migrations && npx prisma migrate dev --schema prisma\\DATABASE_PROVIDER-schema.prisma\"",
+    "db:generate": "node runWithProvider.mjs \"npx prisma generate --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
+    "db:deploy": "node runWithProvider.mjs \"rm -rf ./prisma/migrations && cp -r ./prisma/DATABASE_PROVIDER-migrations ./prisma/migrations && npx prisma migrate deploy --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
+    "db:deploy:win": "node runWithProvider.mjs \"xcopy /E /I prisma\\DATABASE_PROVIDER-migrations prisma\\migrations && npx prisma migrate deploy --schema prisma\\DATABASE_PROVIDER-schema.prisma\"",
+    "db:studio": "node runWithProvider.mjs \"npx prisma studio --schema ./prisma/DATABASE_PROVIDER-schema.prisma\"",
+    "db:migrate:dev": "node runWithProvider.mjs \"rm -rf ./prisma/migrations && cp -r ./prisma/DATABASE_PROVIDER-migrations ./prisma/migrations && npx prisma migrate dev --schema ./prisma/DATABASE_PROVIDER-schema.prisma && cp -r ./prisma/migrations/* ./prisma/DATABASE_PROVIDER-migrations\"",
+    "db:migrate:dev:win": "node runWithProvider.mjs \"xcopy /E /I prisma\\DATABASE_PROVIDER-migrations prisma\\migrations && npx prisma migrate dev --schema prisma\\DATABASE_PROVIDER-schema.prisma\"",
     "prepare": "husky"
   },
   "repository": {
@@ -127,6 +134,7 @@
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
+    "@swc/core": "^1.15.3",
     "@types/compression": "^1.7.5",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.18",
@@ -149,6 +157,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
     "prettier": "^3.4.2",
+    "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.5",
     "typescript": "^5.7.2"

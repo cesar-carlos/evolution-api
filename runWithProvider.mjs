@@ -1,6 +1,6 @@
-const dotenv = require('dotenv');
-const { execSync } = require('child_process');
-const { existsSync } = require('fs');
+import dotenv from 'dotenv';
+import { execSync } from 'child_process';
+import { existsSync } from 'fs';
 
 dotenv.config();
 
@@ -11,7 +11,6 @@ if (!DATABASE_PROVIDER) {
   console.warn(`DATABASE_PROVIDER is not set in the .env file, using default: ${databaseProviderDefault}`);
 }
 
-// Função para determinar qual pasta de migrations usar
 // Função para determinar qual pasta de migrations usar
 function getMigrationsFolder(provider) {
   switch (provider) {
