@@ -8,6 +8,6 @@ export NVM_DIR="$HOME/.nvm"
 # Usa a versão especificada no .nvmrc
 nvm use
 
-# Executa a aplicação
-node dist/main
+# Executa a aplicação (ESM bundle para compatibilidade com Baileys 7.x)
+node --experimental-specifier-resolution=node dist/main.mjs
 

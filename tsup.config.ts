@@ -9,7 +9,10 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   minify: true,
-  format: ['cjs', 'esm'],
+  format: ['esm'],
+  shims: false,
+  bundle: true,
+  noExternal: [/.*/],
   onSuccess: async () => {
     cpSync('src/utils/translations', 'dist/translations', { recursive: true });
   },
