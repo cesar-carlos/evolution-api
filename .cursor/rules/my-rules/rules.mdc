@@ -1,0 +1,100 @@
+---
+alwaysApply: true
+---
+# Evolution-api Fork Development Rules
+
+## Code Quality & Clean CodAe
+
+- Write clean, self-documenting code
+- NO comments explaining what code does
+- NO commented-out code (use git history)
+- NO TODO comments (create issues)
+- NO usage examples in code
+- Use descriptive variable and function names
+- Prefer small, focused functions (under 20 lines)
+- One responsibility per function/class
+- Extract complex logic into well-named functions
+- Use guard clauses to reduce nesting
+- Avoid magic numbers - use named constants
+
+## SOLID Principles (Apply Pragmatically)
+
+### When to Apply:
+
+- Complex business logic
+- Code that changes frequently
+- Shared/reusable components
+- When refactoring reveals patterns
+
+### When NOT to Apply:
+
+- Simple CRUD operations
+- Straightforward data transformations
+- One-off scripts or utilities
+- When existing code uses simpler patterns
+- When abstraction adds more complexity than value
+
+### Principles:
+
+- Single Responsibility: One reason to change per class
+- Open/Closed: Extend without modifying
+- Liskov Substitution: Subtypes must be substitutable
+- Interface Segregation: Small, specific interfaces
+- Dependency Inversion: Depend on abstractions
+
+**Important:** Avoid over-engineering
+
+- Don't create abstractions prematurely
+- Refactor to patterns only when complexity justifies
+- Prefer simplicity over theoretical perfection
+- Follow existing codebase patterns first
+- YAGNI (You Aren't Gonna Need It)
+
+## Branch Strategy
+
+- develop: SYNC ONLY - never commit directly
+- main: production - merge via PR only
+- custom/feature-\*: temporary branches, delete after merge
+
+## Custom Development
+
+- Create custom branches from main
+- Tag versions: v{version}-custom.{YYYYMMDD}
+- Prefix commits with (custom) scope
+- Keep code modular and isolated
+- Follow Evolution-api patterns and conventions
+
+## Sync Strategy
+
+- Sync weekly/before new features
+- Test thoroughly after upstream merge
+- Document breaking changes
+- Resolve conflicts in main branch
+
+## File Organization
+
+- Custom scripts: bin/custom/
+- Custom configs: config/custom/
+- Document in docs/CUSTOMIZATIONS.md
+
+## Testing
+
+- Test before merge to main
+- Run full suite after sync
+- Use make force_run for local testing
+- Write tests that document behavior, not implementation
+
+## Enterprise Compatibility
+
+- Check enterprise/ directory for related files
+- Maintain compatibility with Enterprise features
+- Follow Enterprise development practices
+
+## Pull Requests
+
+- Create PR from custom/\* to main
+- Include description of what and why
+- Reference related issues
+- Ensure all tests pass
+- Request review before merge
+- Keep PRs focused and small

@@ -1,0 +1,30 @@
+{
+  "name": "evolution-qrcode-extension",
+  "version": "1.0.0",
+  "description": "QR Code Vue.js interface for Evolution API",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --emptyOutDir && npm run copy:images",
+    "copy:images": "mkdir -p ../../dist_extensions && cp -r public/images ../../dist_extensions/",
+    "preview": "vite preview",
+    "lint": "prettier --write .",
+    "format": "prettier --write src/"
+  },
+  "dependencies": {
+    "vue": "^3.3.0",
+    "axios": "^1.7.9",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.4.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-vue": "^9.31.0",
+    "prettier": "^3.4.2",
+    "@types/node": "^20.5.1",
+    "tailwindcss": "^3.4.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}
