@@ -1,0 +1,172 @@
+---
+alwaysApply: false
+---
+# Fork Synchronization & Merge Conflict Mitigation Rules
+
+This rule ensures clean synchronization with the upstream Evolution API repository and prevents merge conflicts.
+
+## Critical: Protected Branches
+
+### `develop` Branch - READ ONLY
+
+- **NEVER commit to the `develop` branch**
+- **NEVER push changes to the `develop` branch**
+- **NEVER create branches from `develop` for custom features**
+- The `develop` branch is exclusively for syncing with upstream (original Evolution API repository)
+- If asked to commit to `develop`, REFUSE and explain why
+- Before any commit, VERIFY the current branch is NOT `develop`
+
+### Correct Workflow
+
+1. Custom features: Create branches from `main` (e.g., `custom/feature-name`)
+2. Sync updates: `upstream/develop` → `develop` → `main` (via PR)
+3. Production: All custom code lives in `main`
+
+## Third-Party / Upstream Code Modifications
+
+### General Rule: Avoid Modifications
+
+- **DO NOT modify upstream code unless absolutely necessary**
+- Prefer extension points, hooks, or service layer extensions
+- Use configuration or feature flags instead of code changes
+- Create wrapper classes/modules rather than modifying originals
+- Extend services using TypeScript inheritance or composition patterns
+
+### When Modifications Are Unavoidable
+
+If you MUST modify upstream code to fix bugs or critical issues:
+
+1. **Add a comment explaining the modification** (MANDATORY)
+2. **Comment format:**
+
+```typescript
+// FORK-MODIFICATION: [Brief description of what was changed]
+// REASON: [Why this modification was necessary]
+// UPSTREAM-ISSUE: [Link to upstream issue if exists, or "N/A"]
+// DATE: [YYYY-MM-DD]
+```
+
+3. **Keep modifications minimal** - Change only what's strictly necessary
+4. **Document in `docs/CUSTOMIZATIONS.md`** - List all modified upstream files
+
+### Examples of Good Modification Comments
+
+```typescript
+// FORK-MODIFICATION: Added null check for instance.waMonitor
+// REASON: Upstream bug causes TypeError when waMonitor is not initialized
+// UPSTREAM-ISSUE: https://github.com/EvolutionAPI/evolution-api/issues/XXXX
+// DATE: 2025-01-16
+```
+
+```typescript
+// FORK-MODIFICATION: Changed default timeout from 5000 to 15000ms
+// REASON: Our infrastructure has higher latency requiring longer timeout
+// UPSTREAM-ISSUE: N/A - Environment-specific adjustment
+// DATE: 2025-01-16
+```
+
+## Language Requirements
+
+### All Code Artifacts Must Be in English
+
+- **Comments**: Always in English
+- **Commit messages**: Always in English
+- **Variable/function/class names**: Always in English
+- **Error messages**: Always in English
+- **Documentation**: Always in English
+
+### Commit Message Format
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation
+- `refactor`: Code refactoring
+- `test`: Adding tests
+- `chore`: Maintenance
+
+**Scope for custom code:**
+
+- Use `(custom)` or `(fork)` prefix for custom modifications
+- Example: `feat(custom): add custom WhatsApp integration endpoint`
+- Example: `fix(fork): patch upstream null reference bug in instance service`
+
+## Pre-Commit Checklist
+
+Before committing, verify:
+
+1. [ ] Current branch is NOT `develop`
+2. [ ] No modifications to upstream code without FORK-MODIFICATION comments
+3. [ ] All comments are in English
+4. [ ] Commit message is in English with proper format
+5. [ ] If modifying upstream files, documented in `docs/CUSTOMIZATIONS.md`
+
+## Merge Conflict Prevention
+
+### Best Practices
+
+- Keep custom code isolated in dedicated directories when possible
+- Use `src/api/services/custom/`, `src/api/controllers/custom/`, etc.
+- Extend classes using TypeScript's inheritance or composition patterns
+- Leverage service layer patterns for complex customizations
+- Avoid modifying core service files directly
+- Use integration patterns for external service modifications
+
+### During Upstream Sync
+
+1. Always create a backup tag before merging: `git tag backup/pre-sync-YYYYMMDD`
+2. Merge `develop` into `main` (never the opposite)
+3. Resolve conflicts preserving FORK-MODIFICATION comments
+4. Test thoroughly after merge
+5. Document any new conflicts in sync notes
+
+## File Organization for Custom Code
+
+Prefer these locations for custom code to minimize conflicts:
+
+```
+src/
+├── api/
+│   ├── controllers/
+│   │   └── custom/           # Custom controllers
+│   ├── services/
+│   │   └── custom/           # Custom services
+│   └── integrations/
+│       └── custom/           # Custom integrations
+├── dto/
+│   └── custom/               # Custom DTOs
+├── types/
+│   └── custom/               # Custom type definitions
+└── utils/
+    └── custom/               # Custom utilities
+
+config/
+└── custom/                   # Custom configurations
+
+bin/
+└── custom/                   # Custom scripts
+```
+
+## AI Assistant Instructions
+
+When working with this codebase:
+
+1. **Always check the current branch before suggesting commits**
+2. **If on `develop`, switch to appropriate branch first**
+3. **When modifying any file, check if it's upstream code**
+4. **Add FORK-MODIFICATION comments to any upstream modifications**
+5. **Write all code artifacts in English**
+6. **Follow the commit message format strictly (Conventional Commits)**
+7. **Suggest documenting modifications in `docs/CUSTOMIZATIONS.md`**
+8. **Follow Evolution API patterns: Service layer, DTO validation, RouterBroker pattern**
+9. **Use TypeScript strict mode and proper typing**
+10. **Respect multi-tenant architecture and instance isolation**
