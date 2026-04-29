@@ -33,12 +33,14 @@ import { InstanceDto, SetPresenceDto } from '@api/dto/instance.dto';
 import { HandleLabelDto, LabelDto } from '@api/dto/label.dto';
 import {
   Button,
+  CarouselCard,
   ContactMessage,
   KeyType,
   MediaMessage,
   Options,
   SendAudioDto,
   SendButtonsDto,
+  SendCarouselDto,
   SendContactDto,
   SendListDto,
   SendLocationDto,
@@ -88,10 +90,11 @@ import { sendTelemetry } from '@utils/sendTelemetry';
 import useMultiFileAuthStatePrisma from '@utils/use-multi-file-auth-state-prisma';
 import { AuthStateProvider } from '@utils/use-multi-file-auth-state-provider-files';
 import { useMultiFileAuthStateRedisDb } from '@utils/use-multi-file-auth-state-redis-db';
-import axios from 'axios';
 import audioDecode from 'audio-decode';
+import axios from 'axios';
 import makeWASocket, {
   AnyMessageContent,
+  BinaryNode,
   BufferedEventData,
   BufferJSON,
   CacheStore,
@@ -153,6 +156,7 @@ import { PassThrough, Readable } from 'stream';
 import { v4 } from 'uuid';
 
 import { BaileysMessageProcessor } from './baileysMessage.processor';
+import { buildInteractiveBizNode, buildListBizNode, toNativeFlowButton } from './helpers/interactiveMessage.helper';
 import { useVoiceCallsBaileys } from './voiceCalls/useVoiceCallsBaileys';
 
 export interface ExtendedIMessageKey extends proto.IMessageKey {
@@ -442,7 +446,7 @@ export class BaileysStartupService extends ChannelStartupService {
       qrcodeTerminal.generate(qr, { small: true }, (qrcode) =>
         this.logger.log(
           `\n{ instance: ${this.instance.name} pairingCode: ${this.instance.qrcode.pairingCode}, qrcodeCount: ${this.instance.qrcode.count} }\n` +
-          qrcode,
+            qrcode,
         ),
       );
 
@@ -468,16 +472,16 @@ export class BaileysStartupService extends ChannelStartupService {
 
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const codesToNotReconnect = [DisconnectReason.loggedOut, DisconnectReason.forbidden, 402, 406];
-      
+
       // FIX: Do not reconnect if it's the initial connection (waiting for QR code)
       // This prevents infinite loop that blocks QR code generation
       const isInitialConnection = !this.instance.wuid && (this.instance.qrcode?.count ?? 0) === 0;
-      
+
       if (isInitialConnection) {
         this.logger.info('Initial connection closed, waiting for QR code generation...');
         return;
       }
-      
+
       const shouldReconnect = !codesToNotReconnect.includes(statusCode);
 
       this.logger.info({
@@ -494,9 +498,7 @@ export class BaileysStartupService extends ChannelStartupService {
           await this.connectToWhatsapp(this.phoneNumber);
         }, 3000);
       } else {
-        this.logger.info(
-          `Skipping reconnection for status code ${statusCode} (code is in codesToNotReconnect list)`,
-        );
+        this.logger.info(`Skipping reconnection for status code ${statusCode} (code is in codesToNotReconnect list)`);
         this.sendDataWebhook(Events.STATUS_INSTANCE, {
           instance: this.instance.name,
           status: 'closed',
@@ -1129,16 +1131,16 @@ export class BaileysStartupService extends ChannelStartupService {
 
         const messagesRepository: Set<string> = new Set(
           chatwootImport.getRepositoryMessagesCache(instance) ??
-          (
-            await this.prismaRepository.message.findMany({
-              select: { key: true },
-              where: { instanceId: this.instanceId },
-            })
-          ).map((message) => {
-            const key = message.key as { id: string };
+            (
+              await this.prismaRepository.message.findMany({
+                select: { key: true },
+                where: { instanceId: this.instanceId },
+              })
+            ).map((message) => {
+              const key = message.key as { id: string };
 
-            return key.id;
-          }),
+              return key.id;
+            }),
         );
 
         if (chatwootImport.getRepositoryMessagesCache(instance) === null) {
@@ -1826,7 +1828,7 @@ export class BaileysStartupService extends ChannelStartupService {
 
             if (!findMessage?.id) {
               this.logger.verbose(
-                `Original message not found for update after ${maxRetries} retries. Skipping. This is expected for protocol messages or ephemeral events not saved to the database. Key: ${JSON.stringify(key)}`,
+                `Original message not found for update. Skipping. This is expected for protocol messages or ephemeral events not saved to the database. Key: ${JSON.stringify(key)}`,
               );
               continue;
             }
@@ -2337,12 +2339,12 @@ export class BaileysStartupService extends ChannelStartupService {
       const url = match[0].replace(/[.,);\]]+$/u, '');
       if (!url) return undefined;
 
-      const previewData = await getLinkPreview(url, {
+      const previewData = (await getLinkPreview(url, {
         imagesPropertyType: 'og', // fetches only open-graph images
         headers: {
           'user-agent': 'googlebot', // fetches with googlebot to prevent login pages
         },
-      }) as any;
+      })) as any;
 
       if (!previewData || !previewData.title) return undefined;
 
@@ -2356,9 +2358,9 @@ export class BaileysStartupService extends ChannelStartupService {
           thumbnailUrl: image,
           sourceUrl: url,
           mediaUrl: url,
-          renderLargerThumbnail: true
+          renderLargerThumbnail: true,
           // showAdAttribution: true // Removed to prevent "Sent via ad" label
-        }
+        },
       };
     } catch (error) {
       this.logger.error(`Error generating link preview: ${error}`);
@@ -2375,6 +2377,7 @@ export class BaileysStartupService extends ChannelStartupService {
     messageId?: string,
     ephemeralExpiration?: number,
     contextInfo?: any,
+    additionalNodes?: BinaryNode[],
     // participants?: GroupParticipant[],
   ) {
     sender = sender.toLowerCase();
@@ -2394,14 +2397,17 @@ export class BaileysStartupService extends ChannelStartupService {
     // NOTE: NÃO DEVEMOS GERAR O messageId AQUI, SOMENTE SE VIER INFORMADO POR PARAMETRO. A GERAÇÃO ANTERIOR IMPEDE O WZAP DE IDENTIFICAR A SOURCE.
     if (messageId) option.messageId = messageId;
 
-    if (message['viewOnceMessage']) {
+    if (message['viewOnceMessage'] || message['interactiveMessage'] || message['listMessage']) {
       const m = generateWAMessageFromContent(sender, message, {
         timestamp: new Date(),
         userJid: this.instance.wuid,
         messageId,
         quoted,
       });
-      const id = await this.client.relayMessage(sender, message, { messageId });
+      const id = await this.client.relayMessage(sender, message, {
+        messageId,
+        ...(additionalNodes?.length ? { additionalNodes } : {}),
+      });
       m.key = { id: id, remoteJid: sender, participant: isPnUser(sender) ? sender : undefined, fromMe: true };
       for (const [key, value] of Object.entries(m)) {
         if (!value || (isArray(value) && value.length) === 0) {
@@ -2530,6 +2536,7 @@ export class BaileysStartupService extends ChannelStartupService {
     message: T,
     options?: Options,
     isIntegration = false,
+    additionalNodes?: BinaryNode[],
   ) {
     const isWA = (await this.whatsappNumber({ numbers: [number] }))?.shift();
 
@@ -2637,6 +2644,7 @@ export class BaileysStartupService extends ChannelStartupService {
           options?.messageId ?? null,
           group?.ephemeralDuration,
           previewContext,
+          additionalNodes,
           // group?.participants,
         );
       } else {
@@ -2661,6 +2669,7 @@ export class BaileysStartupService extends ChannelStartupService {
           options?.messageId ?? null,
           undefined,
           contextInfo,
+          additionalNodes,
         );
       }
 
@@ -3661,33 +3670,35 @@ export class BaileysStartupService extends ChannelStartupService {
       }
 
       const message: proto.IMessage = {
-        viewOnceMessage: {
-          message: {
-            interactiveMessage: {
-              nativeFlowMessage: {
-                buttons: [
-                  {
-                    name: this.mapType.get('pix'),
-                    buttonParamsJson: this.toJSONString(data.buttons[0]),
-                  },
-                ],
-                messageParamsJson: JSON.stringify({
-                  from: 'api',
-                  templateId: v4(),
-                }),
+        interactiveMessage: {
+          nativeFlowMessage: {
+            buttons: [
+              {
+                name: this.mapType.get('pix'),
+                buttonParamsJson: this.toJSONString(data.buttons[0]),
               },
-            },
+            ],
+            messageParamsJson: JSON.stringify({
+              from: 'api',
+              templateId: v4(),
+            }),
           },
         },
       };
 
-      return await this.sendMessageWithTyping(data.number, message, {
-        delay: data?.delay,
-        presence: 'composing',
-        quoted: data?.quoted,
-        mentionsEveryOne: data?.mentionsEveryOne,
-        mentioned: data?.mentioned,
-      });
+      return await this.sendMessageWithTyping(
+        data.number,
+        message,
+        {
+          delay: data?.delay,
+          presence: 'composing',
+          quoted: data?.quoted,
+          mentionsEveryOne: data?.mentionsEveryOne,
+          mentioned: data?.mentioned,
+        },
+        false,
+        [buildInteractiveBizNode()],
+      );
     }
 
     // CTA (url / call / copy)
@@ -3722,44 +3733,46 @@ export class BaileysStartupService extends ChannelStartupService {
      * ========================= */
 
     const message: proto.IMessage = {
-      viewOnceMessage: {
-        message: {
-          interactiveMessage: {
-            body: {
-              text: (() => {
-                let text = `*${data.title}*`;
-                if (data?.description) {
-                  text += `\n\n${data.description}`;
-                }
-                return text;
-              })(),
-            },
-            footer: data?.footer ? { text: data.footer } : undefined,
-            header: generatedMedia?.message?.imageMessage
-              ? {
-                  hasMediaAttachment: true,
-                  imageMessage: generatedMedia.message.imageMessage,
-                }
-              : undefined,
-            nativeFlowMessage: {
-              buttons,
-              messageParamsJson: JSON.stringify({
-                from: 'api',
-                templateId: v4(),
-              }),
-            },
-          },
+      interactiveMessage: {
+        body: {
+          text: (() => {
+            let text = `*${data.title}*`;
+            if (data?.description) {
+              text += `\n\n${data.description}`;
+            }
+            return text;
+          })(),
+        },
+        footer: data?.footer ? { text: data.footer } : undefined,
+        header: generatedMedia?.message?.imageMessage
+          ? {
+              hasMediaAttachment: true,
+              imageMessage: generatedMedia.message.imageMessage,
+            }
+          : undefined,
+        nativeFlowMessage: {
+          buttons,
+          messageParamsJson: JSON.stringify({
+            from: 'api',
+            templateId: v4(),
+          }),
         },
       },
     };
 
-    return await this.sendMessageWithTyping(data.number, message, {
-      delay: data?.delay,
-      presence: 'composing',
-      quoted: data?.quoted,
-      mentionsEveryOne: data?.mentionsEveryOne,
-      mentioned: data?.mentioned,
-    });
+    return await this.sendMessageWithTyping(
+      data.number,
+      message,
+      {
+        delay: data?.delay,
+        presence: 'composing',
+        quoted: data?.quoted,
+        mentionsEveryOne: data?.mentionsEveryOne,
+        mentioned: data?.mentioned,
+      },
+      false,
+      [buildInteractiveBizNode()],
+    );
   }
 
   public async locationMessage(data: SendLocationDto) {
@@ -3784,18 +3797,30 @@ export class BaileysStartupService extends ChannelStartupService {
   }
 
   public async listMessage(data: SendListDto) {
+    // Formato LEGADO (`listMessage` com listType SINGLE_SELECT) — funciona em Web, iOS e Android.
+    // O formato moderno (interactiveMessage + nativeFlowMessage com single_select) só renderiza
+    // em mobile recente; no WhatsApp Web/Desktop a mensagem chega vazia.
+    const message: proto.IMessage = {
+      listMessage: {
+        title: data.title || '',
+        description: data.description || '',
+        buttonText: data.buttonText || 'Ver Menu',
+        footerText: data.footerText || '',
+        listType: proto.Message.ListMessage.ListType.SINGLE_SELECT,
+        sections: (data.sections || []).map((section) => ({
+          title: section.title || '',
+          rows: (section.rows || []).map((row) => ({
+            title: row.title || '',
+            description: row.description || '',
+            rowId: row.rowId || '',
+          })),
+        })),
+      },
+    };
+
     return await this.sendMessageWithTyping(
       data.number,
-      {
-        listMessage: {
-          title: data.title,
-          description: data.description,
-          buttonText: data?.buttonText,
-          footerText: data?.footerText,
-          sections: data.sections,
-          listType: 2,
-        },
-      },
+      message,
       {
         delay: data?.delay,
         presence: 'composing',
@@ -3803,6 +3828,93 @@ export class BaileysStartupService extends ChannelStartupService {
         mentionsEveryOne: data?.mentionsEveryOne,
         mentioned: data?.mentioned,
       },
+      false,
+      [buildListBizNode()],
+    );
+  }
+
+  public async carouselMessage(data: SendCarouselDto) {
+    if (!data.cards?.length) {
+      throw new BadRequestException('At least one card is required');
+    }
+    if (data.cards.length > 10) {
+      throw new BadRequestException('Maximum of 10 cards allowed');
+    }
+
+    for (const card of data.cards) {
+      if (!card.buttons?.length) {
+        throw new BadRequestException('Each card must have at least one button');
+      }
+      if (card.buttons.length > 3) {
+        throw new BadRequestException('Maximum of 3 buttons per card');
+      }
+      if (card.buttons.some((b) => b.type === 'pix')) {
+        throw new BadRequestException('PIX buttons are not supported in carousel');
+      }
+    }
+
+    const buildCardButtons = (card: CarouselCard) =>
+      card.buttons.map((btn) =>
+        toNativeFlowButton(btn, {
+          generateRandomId: this.generateRandomId.bind(this),
+          mapKeyType: this.mapKeyType,
+        }),
+      );
+
+    // Otimização iOS: 1 card sem imagem → nativeFlowMessage direto (sem carouselMessage wrapper)
+    const isSingleNoImage = data.cards.length === 1 && !data.cards[0].imageUrl;
+
+    let interactiveMessage: proto.Message.IInteractiveMessage;
+
+    if (isSingleNoImage) {
+      const card = data.cards[0];
+      interactiveMessage = {
+        body: { text: card.body },
+        footer: card.footer ? { text: card.footer } : undefined,
+        nativeFlowMessage: {
+          buttons: buildCardButtons(card),
+          messageParamsJson: JSON.stringify({ from: 'api', templateId: v4() }),
+        },
+      };
+    } else {
+      const cards = await Promise.all(
+        data.cards.map(async (card) => {
+          let header: proto.Message.InteractiveMessage.IHeader | undefined;
+          if (card.imageUrl) {
+            const prepared = await this.prepareMediaMessage({ mediatype: 'image', media: card.imageUrl });
+            if (prepared?.message?.imageMessage) {
+              header = { hasMediaAttachment: true, imageMessage: prepared.message.imageMessage };
+            }
+          }
+          return {
+            header,
+            body: { text: card.body },
+            footer: card.footer ? { text: card.footer } : undefined,
+            nativeFlowMessage: { buttons: buildCardButtons(card) },
+          } as proto.Message.IInteractiveMessage;
+        }),
+      );
+
+      interactiveMessage = {
+        body: { text: data.body },
+        carouselMessage: { cards, messageVersion: 1 },
+      };
+    }
+
+    const message: proto.IMessage = { interactiveMessage };
+
+    return await this.sendMessageWithTyping(
+      data.number,
+      message,
+      {
+        delay: data?.delay,
+        presence: 'composing',
+        quoted: data?.quoted,
+        mentionsEveryOne: data?.mentionsEveryOne,
+        mentioned: data?.mentioned,
+      },
+      false,
+      [buildInteractiveBizNode()],
     );
   }
 
