@@ -27,6 +27,7 @@ import {
   GroupSendInvite,
   GroupSubjectDto,
   GroupToggleEphemeralDto,
+  GroupUpdateMemberAddModeDto,
   GroupUpdateParticipantDto,
   GroupUpdateSettingDto,
 } from '@api/dto/group.dto';
@@ -5077,6 +5078,15 @@ export class BaileysStartupService extends ChannelStartupService {
       return { updateSetting: updateSetting };
     } catch (error) {
       throw new BadRequestException('Error updating setting', error.toString());
+    }
+  }
+
+  public async updateMemberAddMode(update: GroupUpdateMemberAddModeDto) {
+    try {
+      await this.client.groupMemberAddMode(update.groupJid, update.mode);
+      return { update: 'success', mode: update.mode };
+    } catch (error) {
+      throw new BadRequestException('Error updating member add mode', error.toString());
     }
   }
 
