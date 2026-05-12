@@ -183,12 +183,90 @@ export async function initializeRuntime(opts: InitializeOptions = {}): Promise<R
       logger.debug(`Global API key not accepted by licensing server: ${readErrorMessage(err)}`);
     }
   } else {
-    printRegistrationBanner(rc);
-    rc.setActive(false);
+    // No license in DB and no globalApiKey — try silent auto-activation via email.
+    // EVOLUTION_OPERATOR_EMAIL in .env signals: "this email already registered
+    // manually once before, please skip the browser flow".
+    const autoOk = await tryAutoRegisterFromEnv(rc);
+    if (autoOk) {
+      logger.info('License activated automatically via EVOLUTION_OPERATOR_EMAIL');
+    } else {
+      printRegistrationBanner(rc);
+      rc.setActive(false);
+    }
   }
 
   globalRC = rc;
   return rc;
+}
+
+/**
+ * tryAutoRegisterFromEnv attempts a silent license activation using only the
+ * operator email from EVOLUTION_OPERATOR_EMAIL. The customer must have completed
+ * at least one manual registration in the past.
+ *
+ * Returns true on success. Returns false on any failure — the caller is expected
+ * to fall back to the manual flow. Non-fatal best-effort path.
+ */
+async function tryAutoRegisterFromEnv(rc: RuntimeContext): Promise<boolean> {
+  const email = (process.env.EVOLUTION_OPERATOR_EMAIL ?? '').trim();
+  if (!email) return false;
+
+  const payload = {
+    email,
+    tier: rc.tier,
+    version: rc.version,
+    instance_id: rc.instanceId,
+  };
+
+  let resp;
+  try {
+    resp = await postUnsigned<{
+      status?: string;
+      api_key?: string;
+      customer_id?: number;
+      tier?: string;
+    }>('/v1/register/auto', payload);
+  } catch (err) {
+    // Axios throws on non-2xx. Distinguish 404 (expected first-time path) from real errors.
+    const msg = readErrorMessage(err);
+    const isAxiosError = typeof err === 'object' && err !== null && 'response' in err;
+    const status = isAxiosError ? (err as { response?: { status?: number } }).response?.status : undefined;
+
+    if (status === 404) {
+      logger.info('Auto-activation skipped — email not registered yet (first time?). Falling back to manual flow.');
+    } else if (status === 403) {
+      logger.warn(`Auto-activation rejected (403): ${msg}. Falling back to manual flow.`);
+    } else if (status === 409) {
+      logger.warn(`Auto-activation rejected (409): ${msg}. Falling back to manual flow.`);
+    } else {
+      logger.warn(`Auto-activation skipped — ${msg}`);
+    }
+    return false;
+  }
+
+  const data = resp.data;
+  if (!data?.api_key) {
+    logger.warn('Auto-activation response missing api_key');
+    return false;
+  }
+
+  rc.apiKey = data.api_key;
+
+  try {
+    await saveRuntimeData({
+      apiKey: data.api_key,
+      tier: rc.tier,
+      customerId: data.customer_id ?? 0,
+    });
+  } catch (err) {
+    logger.warn(`Auto-activation: could not persist license: ${readErrorMessage(err)}`);
+    // Don't fail — in-memory state is still usable; just won't survive restart.
+  }
+
+  rc.recomputeContextHash();
+  rc.setActive(true);
+  activateIntegrity(rc);
+  return true;
 }
 
 function printRegistrationBanner(rc?: RuntimeContext): void {
