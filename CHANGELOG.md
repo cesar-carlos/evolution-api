@@ -1,3 +1,31 @@
+# 2.4.0-rc2 (2026-05-17)
+
+Estabilização sobre `2.4.0-rc1`. Sem mudanças de banco nem de contrato HTTP — apenas fixes em fluxos do Baileys/WhatsApp e Evolution Channel, suporte nativo a GIF e um caminho opcional de auto-ativação headless da licença.
+
+### Fixed
+
+- **WhatsApp — bypass de validação `onWhatsApp` para contatos `@lid`** ([#2544](https://github.com/evolution-foundation/evolution-api/pull/2544)). Após a migração para LID (Linked Identity) do WhatsApp, contatos cujo JID termina em `@lid` retornavam `exists: false` no `onWhatsApp` da Baileys, fazendo `sendMessageWithTyping` e `sendPresence` lançarem `BadRequestException`. O bypass que já existia para `@broadcast` foi estendido para incluir `@lid`.
+
+- **WhatsApp — `quoted` agora é propagado em `sendWhatsAppAudio`** ([#2516](https://github.com/evolution-foundation/evolution-api/pull/2516), corrige [#2485](https://github.com/evolution-foundation/evolution-api/issues/2485)). Envios de áudio com payload `quoted` deixavam de chegar como resposta encadeada — o áudio caía como mensagem solta. Corrigido nos dois caminhos do `audioWhatsapp` (encoded e direct).
+
+- **Instance API — `instanceName` agora é trimado na criação** ([#2546](https://github.com/evolution-foundation/evolution-api/pull/2546), corrige [#2543](https://github.com/evolution-foundation/evolution-api/issues/2543)). Nomes com espaços inicial/final eram persistidos no banco mas, ao serem chamados via URL (`DELETE /instance/delete/:name`), os espaços eram normalizados, gerando `404` por mismatch. Aplicado `.trim()` no início de `createInstance`.
+
+- **Evolution Channel — instâncias deixam de ficar travadas em `close`** ([#2420](https://github.com/evolution-foundation/evolution-api/pull/2420), corrige [#2419](https://github.com/evolution-foundation/evolution-api/issues/2419)). Como o Evolution Channel é webhook-only (passivo), a instância deveria estar sempre `open`. Agora, no boot do monitor e na criação da instância, `connectToWhatsapp()` é chamado para instâncias `EVOLUTION` e o `connectionStatus` é persistido como `open` no banco.
+
+### Added
+
+- **WhatsApp — suporte nativo a GIF sem conversão para vídeo** ([#2540](https://github.com/evolution-foundation/evolution-api/pull/2540)). DTO e schema de envio de mídia agora aceitam `gifPlayback` (boolean) e `gifAttribution` (0/1/2), propagados para a Baileys. Backward-compat preservado: default segue `gifPlayback: false` quando o cliente não envia o campo.
+
+- **Licensing — auto-ativação headless via `EVOLUTION_OPERATOR_EMAIL`**. Quando a env `EVOLUTION_OPERATOR_EMAIL` está configurada, o `initializeRuntime` chama silenciosamente o endpoint `/v1/register/auto` do licensing server no boot, persiste a `api_key` retornada e ativa a instância — pulando o fluxo de registro pelo browser. **Pré-requisito**: o e-mail precisa ter sido registrado uma vez previamente no licensing server. Em qualquer falha (e-mail desconhecido, servidor inacessível, key suspensa) o sistema **faz fallback não-fatal** para o fluxo de registro manual no `/manager`.
+
+### Notas para upgrade a partir de `2.4.0-rc1`
+
+- Não há mudança de banco nem de contrato HTTP — basta atualizar a imagem.
+- Quem usa `sendWhatsAppAudio` com `quoted` passa a ver o áudio como resposta encadeada (comportamento agora alinhado aos demais métodos de envio).
+- Instâncias do Evolution Channel que estavam em `close` no banco serão promovidas a `open` no próximo boot. Se você dependia desse estado para pausar instâncias manualmente, considere usar outro mecanismo de gate, pois esse fluxo passa a ser sobrescrito.
+
+---
+
 # 2.4.0 (2026-05-06)
 
 ### ⚠️ BREAKING CHANGE — License activation is now required
