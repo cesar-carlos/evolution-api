@@ -285,6 +285,7 @@ export class ChatwootService {
         return null;
       }
       this.logger.log('Init message sent');
+      await this.startQrBroadcastWindow(instance);
     }
 
     return true;
@@ -1072,6 +1073,43 @@ export class ChatwootService {
     return normalized === 'init' || normalized === 'iniciar' || normalized.startsWith('init:');
   }
 
+  private qrBroadcastCacheKey(instanceName: string): string {
+    return `${instanceName}:chatwootQrBroadcast`;
+  }
+
+  private qrBroadcastExpiredKey(instanceName: string): string {
+    return `${instanceName}:chatwootQrBroadcastExpired`;
+  }
+
+  private getQrBroadcastMinutes(): number {
+    return this.configService.get<Chatwoot>('CHATWOOT').QR_BROADCAST_MINUTES;
+  }
+
+  public async startQrBroadcastWindow(instance: InstanceDto): Promise<void> {
+    const minutes = this.getQrBroadcastMinutes();
+    const ttlSeconds = minutes * 60;
+
+    await this.cache.set(this.qrBroadcastCacheKey(instance.instanceName), Date.now(), ttlSeconds);
+    await this.cache.delete(this.qrBroadcastExpiredKey(instance.instanceName));
+
+    this.logger.log(`QR broadcast window started for ${instance.instanceName} (${minutes} minutes)`);
+  }
+
+  private async isQrBroadcastActive(instanceName: string): Promise<boolean> {
+    return this.cache.has(this.qrBroadcastCacheKey(instanceName));
+  }
+
+  private async notifyQrBroadcastExpired(instance: InstanceDto): Promise<void> {
+    const expiredKey = this.qrBroadcastExpiredKey(instance.instanceName);
+
+    if (await this.cache.has(expiredKey)) {
+      return;
+    }
+
+    await this.cache.set(expiredKey, true, 24 * 60 * 60);
+    await this.createBotMessage(instance, i18next.t('cw.inbox.qrBroadcastExpired'), 'incoming');
+  }
+
   public async createBotMessage(
     instance: InstanceDto,
     content: string,
@@ -1464,6 +1502,8 @@ export class ChatwootService {
         const command = messageReceived.replace('/', '');
 
         if (cwBotContact && this.isBotInitCommand(command)) {
+          await this.startQrBroadcastWindow(instance);
+
           const state = waInstance?.connectionStatus?.state;
 
           if (state !== 'open') {
@@ -2579,27 +2619,29 @@ export class ChatwootService {
         if (body.statusCode === 500) {
           const erroQRcode = `🚨 ${i18next.t('qrlimitreached')}`;
           return await this.createBotMessage(instance, erroQRcode, 'incoming');
-        } else {
-          const fileData = Buffer.from(body?.qrcode.base64.replace('data:image/png;base64,', ''), 'base64');
-
-          const fileStream = new Readable();
-          fileStream._read = () => {};
-          fileStream.push(fileData);
-          fileStream.push(null);
-
-          let msgQrCode = `⚡️${i18next.t('qrgeneratedsuccesfully')}\n\n${i18next.t('scanqr')}`;
-
-          if (body?.qrcode?.pairingCode) {
-            msgQrCode =
-              msgQrCode +
-              `\n\n*Pairing Code:* ${body.qrcode.pairingCode.substring(0, 4)}-${body.qrcode.pairingCode.substring(
-                4,
-                8,
-              )}`;
-          }
-
-          await this.createBotQr(instance, msgQrCode, 'incoming', fileStream, `${instance.instanceName}.png`);
         }
+
+        if (!(await this.isQrBroadcastActive(instance.instanceName))) {
+          await this.notifyQrBroadcastExpired(instance);
+          return;
+        }
+
+        const fileData = Buffer.from(body?.qrcode.base64.replace('data:image/png;base64,', ''), 'base64');
+
+        const fileStream = new Readable();
+        fileStream._read = () => {};
+        fileStream.push(fileData);
+        fileStream.push(null);
+
+        let msgQrCode = `⚡️${i18next.t('qrgeneratedsuccesfully')}\n\n${i18next.t('scanqr')}`;
+
+        if (body?.qrcode?.pairingCode) {
+          msgQrCode =
+            msgQrCode +
+            `\n\n*Pairing Code:* ${body.qrcode.pairingCode.substring(0, 4)}-${body.qrcode.pairingCode.substring(4, 8)}`;
+        }
+
+        await this.createBotQr(instance, msgQrCode, 'incoming', fileStream, `${instance.instanceName}.png`);
       }
     } catch (error) {
       this.logger.error(error);

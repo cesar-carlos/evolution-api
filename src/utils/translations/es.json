@@ -8,6 +8,7 @@
   "cw.inbox.clearCache": "✅ Caché de la instancia {{inboxName}} borrada.",
   "cw.inbox.notFound": "⚠️ Instancia {{inboxName}} no encontrada.",
   "cw.inbox.status": "⚠️ Estado de la instancia {{inboxName}}: *{{state}}*.",
+  "cw.inbox.qrBroadcastExpired": "⏱️ Período de envío de QRCode finalizado. Envíe 'init' nuevamente para recibir nuevos códigos QR.",
   "cw.import.startImport": "💬 Empezando a importar mensajes. Espere por favor...",
   "cw.import.importingMessages": "💬 Importando mensajes. mas un momento...",
   "cw.import.messagesImported": "💬 {{totalMessagesImported}} mensajes importados. Actualiza la página para ver los nuevos mensajes..",

@@ -320,6 +320,7 @@ export type Chatwoot = {
   MESSAGE_DELETE: boolean;
   MESSAGE_READ: boolean;
   BOT_CONTACT: boolean;
+  QR_BROADCAST_MINUTES: number;
   IMPORT: {
     DATABASE: {
       CONNECTION: {
@@ -814,6 +815,7 @@ export class ConfigService {
         MESSAGE_DELETE: process.env.CHATWOOT_MESSAGE_DELETE === 'true',
         MESSAGE_READ: process.env.CHATWOOT_MESSAGE_READ === 'true',
         BOT_CONTACT: !process.env.CHATWOOT_BOT_CONTACT || process.env.CHATWOOT_BOT_CONTACT === 'true',
+        QR_BROADCAST_MINUTES: Number.parseInt(process.env.CHATWOOT_QR_BROADCAST_MINUTES) || 3,
         IMPORT: {
           DATABASE: {
             CONNECTION: {
